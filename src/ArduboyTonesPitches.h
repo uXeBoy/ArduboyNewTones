@@ -1,5 +1,5 @@
 /**
- * @file ArduboyTonesPitches.h
+ * @file ArduboyNewTonesPitches.h
  * \brief Frequency definitions for standard note pitches.
  */
 

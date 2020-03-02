@@ -1,11 +1,11 @@
 /**
- * @file ArduboyTones.cpp
- * \brief An Arduino library for playing tones and tone sequences, 
+ * @file ArduboyNewTones.cpp
+ * \brief An Arduino library for playing tones and tone sequences,
  * intended for the Arduboy game system.
  */
 
 /*****************************************************************************
-  ArduboyTones
+  ArduboyNewTones
 
 An Arduino library to play tones and tone sequences.
 
@@ -15,7 +15,11 @@ but could work with other Arduino AVR boards that have 16 bit timer 3
 available, by changing the port and bit definintions for the pin(s)
 if necessary.
 
-Copyright (c) 2017 Scott Allen
+NewTone Created by Tim Eckel - teckel@leethost.com
+Copyright 2013 License: GNU GPL v3 http://www.gnu.org/licenses/gpl-3.0.html
+
+ArduboyTones by Scott Allen
+Copyright (c) 2017
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -36,12 +40,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 *****************************************************************************/
 
-#include "ArduboyTones.h"
+#include "ArduboyNewTones.h"
 
 // pointer to a function that indicates if sound is enabled
 static bool (*outputEnabled)();
 
-static volatile long durationToggleCount = 0;
+static unsigned long _nt_time; // Time note should end.
 static volatile bool tonesPlaying = false;
 static volatile bool toneSilent;
 #ifdef TONES_VOLUME_CONTROL
@@ -131,7 +135,8 @@ void ArduboyTones::tonesInRAM(uint16_t *tones)
 void ArduboyTones::noTone()
 {
   bitWrite(TIMSK3, OCIE3A, 0); // disable the output compare match interrupt
-  TCCR3B = 0; // stop the counter
+  TCCR3B = _BV(CS31); // Default clock prescaler of 8.
+  TCCR3A = _BV(WGM30); // Set to defaults so PWM can work like normal (PWM, phase corrected, 8bit).
   bitClear(TONE_PIN_PORT, TONE_PIN); // set the pin low
 #ifdef TONES_VOLUME_CONTROL
   bitClear(TONE_PIN2_PORT, TONE_PIN2); // set pin 2 low
@@ -163,11 +168,8 @@ void ArduboyTones::nextTone()
 {
   uint16_t freq;
   uint16_t dur;
-  long toggleCount;
-  uint32_t ocrValue;
-#ifdef TONES_ADJUST_PRESCALER
-  uint8_t tccrxbValue;
-#endif
+  uint8_t prescaler;
+  unsigned long top;
 
   freq = getNext(); // get tone frequency
 
@@ -194,28 +196,21 @@ void ArduboyTones::nextTone()
 
   freq &= ~TONE_HIGH_VOLUME; // strip volume indicator from frequency
 
-#ifdef TONES_ADJUST_PRESCALER
-  if (freq >= MIN_NO_PRESCALE_FREQ) {
-    tccrxbValue = _BV(WGM32) | _BV(CS30); // CTC mode, no prescaling
-    ocrValue = F_CPU / freq / 2 - 1;
-    toneSilent = false;
+  if (freq == 0) { // if tone is silent
+    freq = SILENT_FREQ;
+    toneSilent = true;
+    bitClear(TONE_PIN_PORT, TONE_PIN); // set the pin low
   }
   else {
-    tccrxbValue = _BV(WGM32) | _BV(CS31); // CTC mode, prescaler /8
-#endif
-    if (freq == 0) { // if tone is silent
-      ocrValue = F_CPU / 8 / SILENT_FREQ / 2 - 1; // dummy tone for silence
-      freq = SILENT_FREQ;
-      toneSilent = true;
-      bitClear(TONE_PIN_PORT, TONE_PIN); // set the pin low
-    }
-    else {
-      ocrValue = F_CPU / 8 / freq / 2 - 1;
-      toneSilent = false;
-    }
-#ifdef TONES_ADJUST_PRESCALER
+    toneSilent = false;
   }
-#endif
+
+  prescaler = _BV(CS30);           // Try using prescaler 1 first.
+  top = F_CPU / freq / 4 - 1;      // Calculate the top.
+  if (top > 65535) {               // If not in the range for prescaler 1, use prescaler 256 (61 Hz and lower @ 16 MHz).
+    prescaler = _BV(CS32);         // Set the 256 prescaler bit.
+    top = top / 256 - 1;           // Calculate the top using prescaler 256.
+  }
 
   if (!outputEnabled()) { // if sound has been muted
     toneSilent = true;
@@ -237,24 +232,12 @@ void ArduboyTones::nextTone()
 #endif
 
   dur = getNext(); // get tone duration
-  if (dur != 0) {
-    // A right shift is used to divide by 512 for efficency.
-    // For durations in milliseconds it should actually be a divide by 500,
-    // so durations will by shorter by 2.34% of what is specified.
-    toggleCount = ((long)dur * freq) >> 9;
-  }
-  else {
-    toggleCount = -1; // indicate infinite duration
-  }
+  if (dur > 0) _nt_time = millis() + dur; else _nt_time = 0xFFFFFFFF; // Set when the note should end, or play "forever".
 
-  TCCR3A = 0;
-#ifdef TONES_ADJUST_PRESCALER
-  TCCR3B = tccrxbValue;
-#else
-  TCCR3B = _BV(WGM32) | _BV(CS31); // CTC mode, prescaler /8
-#endif
-  OCR3A = ocrValue;
-  durationToggleCount = toggleCount;
+  ICR3 = top;                      // Set the top.
+  if (TCNT3 > top) TCNT3 = top;    // Counter over the top, put within range.
+  TCCR3B = _BV(WGM33) | prescaler; // Set PWM, phase and frequency corrected (ICR1) and prescaler.
+  TCCR3A = _BV(COM3B0);
   bitWrite(TIMSK3, OCIE3A, 1); // enable the output compare match interrupt
 }
 
@@ -268,7 +251,7 @@ uint16_t ArduboyTones::getNext()
 
 ISR(TIMER3_COMPA_vect)
 {
-  if (durationToggleCount != 0) {
+  if (millis() < _nt_time) {
     if (!toneSilent) {
       *(&TONE_PIN_PORT) ^= TONE_PIN_MASK; // toggle the pin
 #ifdef TONES_VOLUME_CONTROL
@@ -276,9 +259,6 @@ ISR(TIMER3_COMPA_vect)
         *(&TONE_PIN2_PORT) ^= TONE_PIN2_MASK; // toggle pin 2
       }
 #endif
-    }
-    if (durationToggleCount > 0) {
-      durationToggleCount--;
     }
   }
   else {

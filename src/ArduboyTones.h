@@ -1,6 +1,6 @@
 /**
- * @file ArduboyTones.h
- * \brief An Arduino library for playing tones and tone sequences, 
+ * @file ArduboyNewTones.h
+ * \brief An Arduino library for playing tones and tone sequences,
  * intended for the Arduboy game system.
  */
 
@@ -88,7 +88,7 @@ THE SOFTWARE.
   // the Arduboy is wired. Allows tones of a higher volume to be produced.
   // If commented out only one speaker pin will be used. The other speaker
   // lead should be attached to ground.
-  #define TONES_2_SPEAKER_PINS
+  //#define TONES_2_SPEAKER_PINS
   // *******************************
 
   // ***** VOLUME HIGH/NORMAL SUPPORT *****
@@ -97,7 +97,7 @@ THE SOFTWARE.
   // Normal volume is produced by leaving the second pin low.
   // Comment this out for only normal volume support, which will slightly
   // reduce the code size.
-  #define TONES_VOLUME_CONTROL
+  //#define TONES_VOLUME_CONTROL
   // **************************************
 
   #ifdef TONES_VOLUME_CONTROL
@@ -105,15 +105,6 @@ THE SOFTWARE.
     #define TONES_2_SPEAKER_PINS
   #endif
 #endif
-
-// ***** CONTROL THE TIMER CLOCK PRESCALER ****
-// Uncommenting this will switch the timer clock to use no prescaler,
-// instead of a divide by 8 prescaler, if the frequency is high enough to
-// allow it. This will result in higher frequencies being more accurate at
-// the expense of requiring more code. If left commented out, a divide by 8
-// prescaler will be used for all frequencies.
-//#define TONES_ADJUST_PRESCALER
-// ********************************************
 
 // This must match the maximum number of tones that can be specified in
 // the tone() function.
@@ -137,9 +128,6 @@ THE SOFTWARE.
   #define TONE_PIN PORTF5
   #define TONE_PIN_MASK _BV(TONE_PIN)
 #endif
-
-// The minimum frequency that can be produced without a clock prescaler.
-#define MIN_NO_PRESCALE_FREQ ((uint16_t)(((F_CPU / 2L) + (1L << 16) - 1L) / (1L << 16)))
 
 // Dummy frequency used to for silent tones (rests).
 #define SILENT_FREQ 250
@@ -200,7 +188,7 @@ class ArduboyTones
    * \param tones A pointer to an array of frequency/duration pairs.
    * The array must be placed in code space using `PROGMEM`.
    *
-   * \details 
+   * \details
    * \parblock
    * See the `tone()` function for details on the frequency and duration values.
    * A frequency of 0 for any tone means silence (a musical rest).
@@ -228,7 +216,7 @@ class ArduboyTones
    *
    * \see tones()
    *
-   * \details 
+   * \details
    * \parblock
    * See the `tone()` function for details on the frequency and duration values.
    * A frequency of 0 for any tone means silence (a musical rest).
@@ -293,6 +281,6 @@ public:
   static void nextTone();
 };
 
-#include "ArduboyTonesPitches.h"
+#include "ArduboyNewTonesPitches.h"
 
 #endif
